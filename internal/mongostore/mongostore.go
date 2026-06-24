@@ -8,6 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"external-service-log/internal/logstore"
 	"external-service-log/internal/types"
 )
 
@@ -76,6 +77,42 @@ func ensureTimeSeriesCollections(ctx context.Context, db *mongo.Database) error 
 	}
 
 	return nil
+}
+
+// FindLogs returns recent log entries from a single collection, newest first.
+func (s *Store) FindLogs(ctx context.Context, filter logstore.FindLogsFilter) ([]types.LogEntry, error) {
+	coll := filter.Collection
+	if coll == "" {
+		coll = types.CollectionAPILogs
+	}
+	limit := filter.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+
+	query := bson.D{}
+	if filter.AppName != "" {
+		query = bson.D{{Key: "source.app_name", Value: filter.AppName}}
+	}
+
+	opts := options.Find().
+		SetSort(bson.D{{Key: "timestamp", Value: -1}}).
+		SetLimit(limit)
+
+	cursor, err := s.db.Collection(string(coll)).Find(ctx, query, opts)
+	if err != nil {
+		return nil, fmt.Errorf("find logs: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var entries []types.LogEntry
+	if err := cursor.All(ctx, &entries); err != nil {
+		return nil, fmt.Errorf("decode logs: %w", err)
+	}
+	if entries == nil {
+		entries = []types.LogEntry{}
+	}
+	return entries, nil
 }
 
 // InsertLogs groups logs by their destination collection and inserts each
