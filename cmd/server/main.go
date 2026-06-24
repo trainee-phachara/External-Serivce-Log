@@ -66,7 +66,7 @@ func main() {
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: httpapi.NewHandler(buf, fl),
+		Handler: httpapi.NewHandler(buf, fl, store),
 	}
 
 	go func() {
