@@ -53,7 +53,15 @@ proto/               ← proto definition file
 
 รับ log entry และเก็บลง MongoDB
 
+| Field | Required | Valid Values |
+|---|---|---|
+| `source.app_name` | ✓ | ชื่อ service ที่ส่ง log |
+| `type` | ✓ | `request`, `response`, `event` |
+| `direction` | ✓ | `inbound`, `outbound` |
+| `http_status` | ✓ | HTTP status code เป็น string |
+
 ```bash
+# response log (HTTP traffic ปกติ)
 curl -X POST http://localhost:3000/ingest \
   -H "Content-Type: application/json" \
   -d '{
@@ -62,6 +70,18 @@ curl -X POST http://localhost:3000/ingest \
     "endpoint": "/users",
     "http_status": "201",
     "type": "response",
+    "direction": "inbound"
+  }'
+
+# event log (business event)
+curl -X POST http://localhost:3000/ingest \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": { "app_name": "user-service", "service_name": "user" },
+    "trace_id": "abc-456",
+    "endpoint": "user.created",
+    "http_status": "200",
+    "type": "event",
     "direction": "inbound"
   }'
 ```
@@ -82,9 +102,10 @@ GET /logs?collection=api_logs&app=user-service&limit=50
 
 ## How to Run
 
+### Local
+
 ```bash
 # ต้องมี MongoDB รันอยู่ก่อน
-
 go run ./cmd/server
 ```
 
@@ -92,6 +113,23 @@ go run ./cmd/server
 
 ```bash
 PORT=3000 GRPC_PORT=50051 MONGO_URI=mongodb://localhost:27017 go run ./cmd/server
+```
+
+### Docker
+
+```bash
+docker build -t external-service-log .
+docker run -p 3000:3000 -p 50051:50051 \
+  -e MONGO_URI=mongodb://host.docker.internal:27017 \
+  external-service-log
+```
+
+### Docker Compose (แนะนำ)
+
+รันพร้อมกับ services อื่นทั้งหมดจาก root ของ project:
+
+```bash
+docker compose up --build
 ```
 
 ## Log Collections
