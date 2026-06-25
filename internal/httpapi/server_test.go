@@ -13,8 +13,16 @@ import (
 
 	"external-service-log/internal/buffer"
 	"external-service-log/internal/flusher"
+	"external-service-log/internal/logstore"
 	"external-service-log/internal/types"
 )
+
+type noopStore struct{}
+
+func (noopStore) InsertLogs(_ context.Context, _ []types.BufferedLog) error { return nil }
+func (noopStore) FindLogs(_ context.Context, _ logstore.FindLogsFilter) ([]types.LogEntry, error) {
+	return nil, nil
+}
 
 func validPayload(overrides map[string]interface{}) map[string]interface{} {
 	body := map[string]interface{}{
@@ -47,7 +55,7 @@ func newTestServer(maxSize int) (http.Handler, *buffer.LogBuffer, *int32, *int32
 		return nil
 	}
 	fl := flusher.New(buf, insert, flusher.Options{MaxSize: maxSize, Interval: 5 * time.Second})
-	return NewHandler(buf, fl), buf, &calls, &total, fl
+	return NewHandler(buf, fl, noopStore{}), buf, &calls, &total, fl
 }
 
 func postIngest(handler http.Handler, body interface{}) *httptest.ResponseRecorder {

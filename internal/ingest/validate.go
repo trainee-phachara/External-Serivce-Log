@@ -54,7 +54,7 @@ func ValidateIngestBody(body interface{}) ValidationResult {
 	}
 
 	if logType, ok := candidate["type"].(string); !ok || !validLogTypes[logType] {
-		errors = append(errors, "type is required and must be one of: request, response")
+		errors = append(errors, "type is required and must be one of: request, response, event")
 	}
 
 	if direction, ok := candidate["direction"].(string); !ok || !validLogDirections[direction] {

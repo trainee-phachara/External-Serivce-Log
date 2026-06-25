@@ -117,7 +117,7 @@ func TestValidateIngestBody_RejectsInvalidType(t *testing.T) {
 	if result.Valid {
 		t.Error("Valid = true, want false")
 	}
-	want := "type is required and must be one of: request, response"
+	want := "type is required and must be one of: request, response, event"
 	if !containsString(result.Errors, want) {
 		t.Errorf("Errors = %v, want to contain %q", result.Errors, want)
 	}
