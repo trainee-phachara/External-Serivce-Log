@@ -1,6 +1,6 @@
 package ingest
 
-var validLogTypes = map[string]bool{"request": true, "response": true}
+var validLogTypes = map[string]bool{"request": true, "response": true, "event": true}
 var validLogDirections = map[string]bool{"inbound": true, "outbound": true}
 
 // ValidationResult is the outcome of validating an ingest request body.

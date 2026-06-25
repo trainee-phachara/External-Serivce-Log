@@ -8,6 +8,7 @@ type LogType string
 const (
 	LogTypeRequest  LogType = "request"
 	LogTypeResponse LogType = "response"
+	LogTypeEvent    LogType = "event"
 )
 
 // LogDirection is the direction of a logged exchange relative to the
