@@ -13,7 +13,6 @@ import (
 
 func makeLog(traceID string) types.BufferedLog {
 	return types.BufferedLog{
-		Collection: types.CollectionAPILogs,
 		Entry: types.LogEntry{
 			Timestamp:  time.Now(),
 			Source:     types.LogSource{AppName: "order-service", ServiceName: "order"},

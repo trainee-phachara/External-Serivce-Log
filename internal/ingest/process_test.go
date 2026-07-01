@@ -58,9 +58,6 @@ func TestProcessIngest_AcceptsValidBody(t *testing.T) {
 
 	drained := buf.Drain()
 	entry := drained[0]
-	if entry.Collection != types.CollectionAPILogs {
-		t.Errorf("collection = %q, want %q", entry.Collection, types.CollectionAPILogs)
-	}
 	if entry.Entry.TraceID != "trace-abc" {
 		t.Errorf("trace_id = %q, want %q", entry.Entry.TraceID, "trace-abc")
 	}
@@ -69,24 +66,6 @@ func TestProcessIngest_AcceptsValidBody(t *testing.T) {
 	}
 }
 
-func TestProcessIngest_RoutesErrorStatusToErrorLogs(t *testing.T) {
-	buf := buffer.New()
-	fl, _, _ := newTestFlusher(buf)
-
-	result := ProcessIngest(validIngestBody(map[string]interface{}{
-		"http_status": "503",
-		"type":        "response",
-	}), buf, fl)
-
-	if !result.Accepted {
-		t.Fatalf("result = %+v, want accepted", result)
-	}
-
-	drained := buf.Drain()
-	if drained[0].Collection != types.CollectionErrorLogs {
-		t.Errorf("collection = %q, want %q", drained[0].Collection, types.CollectionErrorLogs)
-	}
-}
 
 func TestProcessIngest_DefaultsOptionalFieldsToEmptyObjects(t *testing.T) {
 	buf := buffer.New()

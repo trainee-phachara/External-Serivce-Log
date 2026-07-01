@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,11 +18,16 @@ import (
 	"external-service-log/internal/types"
 )
 
-type noopStore struct{}
+type fakeStore struct {
+	entries []types.LogEntry
+	err     error
+	filter  logstore.FindLogsFilter
+}
 
-func (noopStore) InsertLogs(_ context.Context, _ []types.BufferedLog) error { return nil }
-func (noopStore) FindLogs(_ context.Context, _ logstore.FindLogsFilter) ([]types.LogEntry, error) {
-	return nil, nil
+func (f *fakeStore) InsertLogs(_ context.Context, _ []types.BufferedLog) error { return nil }
+func (f *fakeStore) FindLogs(_ context.Context, filter logstore.FindLogsFilter) ([]types.LogEntry, error) {
+	f.filter = filter
+	return f.entries, f.err
 }
 
 func validPayload(overrides map[string]interface{}) map[string]interface{} {
@@ -55,7 +61,7 @@ func newTestServer(maxSize int) (http.Handler, *buffer.LogBuffer, *int32, *int32
 		return nil
 	}
 	fl := flusher.New(buf, insert, flusher.Options{MaxSize: maxSize, Interval: 5 * time.Second})
-	return NewHandler(buf, fl, noopStore{}), buf, &calls, &total, fl
+	return NewHandler(buf, fl, &fakeStore{}), buf, &calls, &total, fl
 }
 
 func postIngest(handler http.Handler, body interface{}) *httptest.ResponseRecorder {
@@ -92,15 +98,12 @@ func TestIngest_AcceptsValidLogAndPushesToBuffer(t *testing.T) {
 	}
 }
 
-func TestIngest_ClassifiesAndStoresEntryShape(t *testing.T) {
+func TestIngest_StoresEntryShape(t *testing.T) {
 	handler, buf, _, _, _ := newTestServer(3)
 
 	postIngest(handler, validPayload(map[string]interface{}{"trace_id": "trace-abc"}))
 
 	entry := buf.Drain()[0]
-	if entry.Collection != types.CollectionAPILogs {
-		t.Errorf("collection = %q, want %q", entry.Collection, types.CollectionAPILogs)
-	}
 	if entry.Entry.TraceID != "trace-abc" {
 		t.Errorf("trace_id = %q, want %q", entry.Entry.TraceID, "trace-abc")
 	}
@@ -113,16 +116,6 @@ func TestIngest_ClassifiesAndStoresEntryShape(t *testing.T) {
 	}
 }
 
-func TestIngest_RoutesErrorStatusToErrorLogs(t *testing.T) {
-	handler, buf, _, _, _ := newTestServer(3)
-
-	postIngest(handler, validPayload(map[string]interface{}{"http_status": "500", "type": "response"}))
-
-	entry := buf.Drain()[0]
-	if entry.Collection != types.CollectionErrorLogs {
-		t.Errorf("collection = %q, want %q", entry.Collection, types.CollectionErrorLogs)
-	}
-}
 
 func TestIngest_RejectsMissingRequiredFields(t *testing.T) {
 	handler, buf, _, _, _ := newTestServer(3)
@@ -197,6 +190,73 @@ func TestIngest_TriggersFlushAtThreshold(t *testing.T) {
 	}
 	if !buf.IsEmpty() {
 		t.Error("buffer not empty after threshold flush")
+	}
+}
+
+func TestGetLogs_ReturnsEntriesFromStore(t *testing.T) {
+	store := &fakeStore{
+		entries: []types.LogEntry{
+			{TraceID: "t-1", Type: types.LogTypeRequest},
+			{TraceID: "t-2", Type: types.LogTypeResponse},
+		},
+	}
+	buf := buffer.New()
+	fl := flusher.New(buf, store.InsertLogs, flusher.Options{MaxSize: 100, Interval: 5 * time.Second})
+	handler := NewHandler(buf, fl, store)
+
+	req := httptest.NewRequest(http.MethodGet, "/logs?type=request&app=order-service&limit=10", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if store.filter.Type != types.LogTypeRequest {
+		t.Errorf("filter.Type = %q, want %q", store.filter.Type, types.LogTypeRequest)
+	}
+	if store.filter.AppName != "order-service" {
+		t.Errorf("filter.AppName = %q, want %q", store.filter.AppName, "order-service")
+	}
+	if store.filter.Limit != 10 {
+		t.Errorf("filter.Limit = %d, want 10", store.filter.Limit)
+	}
+
+	var entries []types.LogEntry
+	if err := json.NewDecoder(rec.Body).Decode(&entries); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("len(entries) = %d, want 2", len(entries))
+	}
+}
+
+func TestGetLogs_ReturnsErrorFromStore(t *testing.T) {
+	store := &fakeStore{err: fmt.Errorf("db down")}
+	buf := buffer.New()
+	fl := flusher.New(buf, store.InsertLogs, flusher.Options{MaxSize: 100, Interval: 5 * time.Second})
+	handler := NewHandler(buf, fl, store)
+
+	req := httptest.NewRequest(http.MethodGet, "/logs", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestCORS_OptionsReturnsNoContent(t *testing.T) {
+	handler, _, _, _, _ := newTestServer(3)
+
+	req := httptest.NewRequest(http.MethodOptions, "/logs", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNoContent)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("CORS origin = %q, want %q", got, "*")
 	}
 }
 
