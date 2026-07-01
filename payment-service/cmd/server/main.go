@@ -14,7 +14,7 @@ import (
 
 	"payment-service/internal/db"
 	"payment-service/internal/httpapi"
-	"payment-service/internal/logclient"
+	logclient "github.com/trainee-phachara/External-Serivce-Log/client"
 	"payment-service/internal/payments"
 )
 
@@ -55,7 +55,7 @@ func main() {
 
 	repo := payments.NewRepository(pool)
 
-	logClient, err := logclient.New(logServiceGRPCURL)
+	logClient, err := logclient.New(logclient.Config{Address: logServiceGRPCURL})
 	if err != nil {
 		log.Fatalf("Failed to create log client: %v", err)
 	}

@@ -3,11 +3,12 @@ package logclient
 import (
 	"context"
 	"log"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	pb "payment-service/internal/grpc/pb"
+	pb "github.com/trainee-phachara/External-Serivce-Log/client/pb"
 )
 
 // LogSource identifies the application/service emitting a log entry.
@@ -36,23 +37,43 @@ type LogClient interface {
 	Close() error
 }
 
-type grpcLogClient struct {
-	conn   *grpc.ClientConn
-	client pb.IngestServiceClient
+// Config holds options for creating a LogClient.
+type Config struct {
+	// Address is the gRPC server address (e.g. "localhost:50051").
+	Address string
+	// Timeout is the per-call deadline. Defaults to 5 seconds when zero.
+	Timeout time.Duration
 }
 
-// New connects to the IngestService at address.
-func New(address string) (LogClient, error) {
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+type grpcLogClient struct {
+	conn    *grpc.ClientConn
+	client  pb.IngestServiceClient
+	timeout time.Duration
+}
+
+// New connects to the IngestService at cfg.Address.
+func New(cfg Config) (LogClient, error) {
+	if cfg.Timeout == 0 {
+		cfg.Timeout = 5 * time.Second
+	}
+
+	conn, err := grpc.NewClient(cfg.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
 	}
-	return &grpcLogClient{conn: conn, client: pb.NewIngestServiceClient(conn)}, nil
+	return &grpcLogClient{
+		conn:    conn,
+		client:  pb.NewIngestServiceClient(conn),
+		timeout: cfg.Timeout,
+	}, nil
 }
 
 func (c *grpcLogClient) SendLog(entry LogEntryInput) {
 	go func() {
-		_, err := c.client.Ingest(context.Background(), &pb.IngestRequest{
+		ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+		defer cancel()
+
+		_, err := c.client.Ingest(ctx, &pb.IngestRequest{
 			Source: &pb.LogSource{
 				AppName:     entry.Source.AppName,
 				ServiceName: entry.Source.ServiceName,
@@ -67,7 +88,7 @@ func (c *grpcLogClient) SendLog(entry LogEntryInput) {
 			PayloadJson:    entry.PayloadJSON,
 		})
 		if err != nil {
-			log.Printf("Failed to send log to external-service-log: %v", err)
+			log.Printf("logclient: failed to send log: %v", err)
 		}
 	}()
 }

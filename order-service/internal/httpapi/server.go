@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"order-service/internal/logclient"
+	logclient "github.com/trainee-phachara/External-Serivce-Log/client"
 	"order-service/internal/orders"
 )
 

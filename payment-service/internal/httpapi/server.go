@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"payment-service/internal/logclient"
+	logclient "github.com/trainee-phachara/External-Serivce-Log/client"
 	"payment-service/internal/payments"
 )
 

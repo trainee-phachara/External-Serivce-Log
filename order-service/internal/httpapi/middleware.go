@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"order-service/internal/logclient"
+	logclient "github.com/trainee-phachara/External-Serivce-Log/client"
 )
 
 const (

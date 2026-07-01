@@ -6,8 +6,12 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0
-	google.golang.org/grpc v1.81.1
-	google.golang.org/protobuf v1.36.11
+	github.com/trainee-phachara/External-Serivce-Log/client v0.0.0-00010101000000-000000000000
+)
+
+require (
+	google.golang.org/grpc v1.81.1 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 )
 
 require (
@@ -69,3 +73,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/trainee-phachara/External-Serivce-Log/client => ../client

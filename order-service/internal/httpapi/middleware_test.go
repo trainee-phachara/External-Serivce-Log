@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"order-service/internal/logclient"
+	logclient "github.com/trainee-phachara/External-Serivce-Log/client"
 )
 
 // fakeLogClient records every entry passed to SendLog for inspection in tests.

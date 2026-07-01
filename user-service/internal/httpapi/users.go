@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"user-service/internal/logclient"
+	logclient "github.com/trainee-phachara/External-Serivce-Log/client"
 	"user-service/internal/users"
 )
 

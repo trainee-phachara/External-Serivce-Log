@@ -7,12 +7,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "order-service/internal/grpc/pb"
+	pb "github.com/trainee-phachara/External-Serivce-Log/client/pb"
 )
 
 type fakeIngestServer struct {
@@ -26,25 +27,19 @@ func (s *fakeIngestServer) Ingest(ctx context.Context, req *pb.IngestRequest) (*
 
 func startTestServer(t *testing.T, fake *fakeIngestServer) string {
 	t.Helper()
-
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-
 	server := grpc.NewServer()
 	pb.RegisterIngestServiceServer(server, fake)
-
-	go func() {
-		_ = server.Serve(lis)
-	}()
+	go func() { _ = server.Serve(lis) }()
 	t.Cleanup(server.Stop)
-
 	return lis.Addr().String()
 }
 
 func validEntry(modify func(*LogEntryInput)) LogEntryInput {
-	entry := LogEntryInput{
+	e := LogEntryInput{
 		Source:         LogSource{AppName: "order-service", ServiceName: "order"},
 		TraceID:        "trace-1",
 		Endpoint:       "/orders",
@@ -56,28 +51,32 @@ func validEntry(modify func(*LogEntryInput)) LogEntryInput {
 		PayloadJSON:    `{"id":1}`,
 	}
 	if modify != nil {
-		modify(&entry)
+		modify(&e)
 	}
-	return entry
+	return e
 }
 
-func TestSendLog_SendsEntryFieldsToIngestService(t *testing.T) {
-	received := make(chan *pb.IngestRequest, 1)
-	fake := &fakeIngestServer{
-		handle: func(_ context.Context, req *pb.IngestRequest) (*pb.IngestResponse, error) {
-			received <- req
-			return &pb.IngestResponse{Accepted: true, Errors: []string{}}, nil
-		},
-	}
-	address := startTestServer(t, fake)
-
-	client, err := New(address)
+func newTestClient(t *testing.T, addr string) LogClient {
+	t.Helper()
+	c, err := New(Config{Address: addr, Timeout: 2 * time.Second})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	t.Cleanup(func() { _ = client.Close() })
+	t.Cleanup(func() { _ = c.Close() })
+	return c
+}
 
-	client.SendLog(validEntry(func(e *LogEntryInput) { e.TraceID = "trace-abc" }))
+func TestSendLog_SendsAllFieldsToIngestService(t *testing.T) {
+	received := make(chan *pb.IngestRequest, 1)
+	addr := startTestServer(t, &fakeIngestServer{
+		handle: func(_ context.Context, req *pb.IngestRequest) (*pb.IngestResponse, error) {
+			received <- req
+			return &pb.IngestResponse{Accepted: true}, nil
+		},
+	})
+
+	c := newTestClient(t, addr)
+	c.SendLog(validEntry(func(e *LogEntryInput) { e.TraceID = "trace-abc" }))
 
 	req := <-received
 	if req.TraceId != "trace-abc" {
@@ -94,25 +93,20 @@ func TestSendLog_SendsEntryFieldsToIngestService(t *testing.T) {
 	}
 }
 
-func TestSendLog_LogsErrorWhenServerCallFails(t *testing.T) {
-	fake := &fakeIngestServer{
+func TestSendLog_LogsErrorWhenServerFails(t *testing.T) {
+	addr := startTestServer(t, &fakeIngestServer{
 		handle: func(_ context.Context, _ *pb.IngestRequest) (*pb.IngestResponse, error) {
 			return nil, status.Error(codes.Internal, "boom")
 		},
-	}
-	address := startTestServer(t, fake)
+	})
 
-	client, err := New(address)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	t.Cleanup(func() { _ = client.Close() })
+	c := newTestClient(t, addr)
 
 	var buf strings.Builder
 	var mu sync.Mutex
 	done := make(chan struct{})
 
-	originalOutput := log.Writer()
+	orig := log.Writer()
 	log.SetOutput(writerFunc(func(p []byte) (int, error) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -124,36 +118,60 @@ func TestSendLog_LogsErrorWhenServerCallFails(t *testing.T) {
 		}
 		return n, err
 	}))
-	t.Cleanup(func() { log.SetOutput(originalOutput) })
+	t.Cleanup(func() { log.SetOutput(orig) })
 
-	client.SendLog(validEntry(nil))
-
+	c.SendLog(validEntry(nil))
 	<-done
 
 	mu.Lock()
 	defer mu.Unlock()
-	if !strings.Contains(buf.String(), "Failed to send log to external-service-log") {
-		t.Errorf("log output = %q, want to contain failure message", buf.String())
+	if !strings.Contains(buf.String(), "logclient: failed to send log") {
+		t.Errorf("log output = %q, want failure message", buf.String())
 	}
-	if !strings.Contains(buf.String(), "boom") {
-		t.Errorf("log output = %q, want to contain %q", buf.String(), "boom")
+}
+
+func TestSendLog_RespectsTimeout(t *testing.T) {
+	addr := startTestServer(t, &fakeIngestServer{
+		handle: func(ctx context.Context, _ *pb.IngestRequest) (*pb.IngestResponse, error) {
+			<-ctx.Done()
+			return nil, status.Error(codes.DeadlineExceeded, "timeout")
+		},
+	})
+
+	done := make(chan struct{})
+	orig := log.Writer()
+	log.SetOutput(writerFunc(func(p []byte) (int, error) {
+		select {
+		case <-done:
+		default:
+			close(done)
+		}
+		return len(p), nil
+	}))
+	t.Cleanup(func() { log.SetOutput(orig) })
+
+	c, _ := New(Config{Address: addr, Timeout: 50 * time.Millisecond})
+	t.Cleanup(func() { _ = c.Close() })
+	c.SendLog(validEntry(nil))
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("SendLog did not time out within 2s")
 	}
 }
 
 func TestClose_DoesNotError(t *testing.T) {
-	fake := &fakeIngestServer{
+	addr := startTestServer(t, &fakeIngestServer{
 		handle: func(_ context.Context, _ *pb.IngestRequest) (*pb.IngestResponse, error) {
-			return &pb.IngestResponse{Accepted: true, Errors: []string{}}, nil
+			return &pb.IngestResponse{Accepted: true}, nil
 		},
-	}
-	address := startTestServer(t, fake)
-
-	client, err := New(address)
+	})
+	c, err := New(Config{Address: addr})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-
-	if err := client.Close(); err != nil {
+	if err := c.Close(); err != nil {
 		t.Errorf("Close() = %v, want nil", err)
 	}
 }
