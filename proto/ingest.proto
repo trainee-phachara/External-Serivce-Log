@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package logging;
 
-option go_package = "external-service-log/internal/grpc/pb";
+option go_package = "github.com/trainee-phachara/External-Service-Log/client/pb";
 
 service IngestService {
   rpc Ingest (IngestRequest) returns (IngestResponse);

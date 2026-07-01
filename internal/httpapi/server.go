@@ -37,14 +37,14 @@ func NewHandler(buf *buffer.LogBuffer, fl *flusher.BatchFlusher, store logstore.
 	mux.HandleFunc("GET /logs", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 
-		coll := types.CollectionName(q.Get("collection"))
+		logType := types.LogType(q.Get("type"))
 		appName := q.Get("app")
 		limit, _ := strconv.ParseInt(q.Get("limit"), 10, 64)
 
 		entries, err := store.FindLogs(r.Context(), logstore.FindLogsFilter{
-			Collection: coll,
-			AppName:    appName,
-			Limit:      limit,
+			Type:    logType,
+			AppName: appName,
+			Limit:   limit,
 		})
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]interface{}{"error": err.Error()})

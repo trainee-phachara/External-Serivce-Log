@@ -20,15 +20,7 @@ const (
 	LogDirectionOutbound LogDirection = "outbound"
 )
 
-// CollectionName is the name of one of the MongoDB time-series collections
-// logs are routed into.
-type CollectionName string
-
-const (
-	CollectionAPILogs   CollectionName = "api_logs"
-	CollectionEventLogs CollectionName = "event_logs"
-	CollectionErrorLogs CollectionName = "error_logs"
-)
+const CollectionName = "service_logs"
 
 // LogSource identifies the application and service that produced a log entry.
 type LogSource struct {
@@ -64,8 +56,6 @@ type IngestRequestBody struct {
 	Direction  LogDirection           `json:"direction"`
 }
 
-// BufferedLog pairs a LogEntry with the collection it should be inserted into.
 type BufferedLog struct {
-	Collection CollectionName
-	Entry      LogEntry
+	Entry LogEntry
 }

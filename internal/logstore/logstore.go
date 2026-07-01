@@ -8,9 +8,9 @@ import (
 
 // FindLogsFilter controls which logs a LogStore returns.
 type FindLogsFilter struct {
-	Collection types.CollectionName // empty = api_logs
-	AppName    string               // empty = all apps
-	Limit      int64                // 0 = default 50
+	AppName string         // empty = all apps
+	Type    types.LogType  // empty = all types
+	Limit   int64          // 0 = default 50
 }
 
 // LogStore is the interface any log storage backend must implement.

@@ -40,7 +40,7 @@ func ProcessIngest(rawBody interface{}, buf *buffer.LogBuffer, fl *flusher.Batch
 		Direction:  body.Direction,
 	}
 
-	buf.Push(types.BufferedLog{Collection: ClassifyCollection(body), Entry: entry})
+	buf.Push(types.BufferedLog{Entry: entry})
 	fl.OnLogPushed()
 
 	return ProcessResult{Accepted: true, Errors: []string{}}

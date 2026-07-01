@@ -16,11 +16,6 @@ import (
 // before MongoDB automatically expires them (30 days).
 const ttlSeconds = 60 * 60 * 24 * 30
 
-var collectionNames = []types.CollectionName{
-	types.CollectionAPILogs,
-	types.CollectionEventLogs,
-	types.CollectionErrorLogs,
-}
 
 // Store persists buffered logs into MongoDB time-series collections.
 type Store struct {
@@ -53,38 +48,29 @@ func ensureTimeSeriesCollections(ctx context.Context, db *mongo.Database) error 
 		return fmt.Errorf("list collections: %w", err)
 	}
 
-	existingNames := make(map[string]bool, len(existing))
 	for _, name := range existing {
-		existingNames[name] = true
+		if name == types.CollectionName {
+			return nil
+		}
 	}
 
-	for _, name := range collectionNames {
-		if existingNames[string(name)] {
-			continue
-		}
+	timeSeriesOpts := options.TimeSeries().
+		SetTimeField("timestamp").
+		SetMetaField("source").
+		SetGranularity("seconds")
+	opts := options.CreateCollection().
+		SetTimeSeriesOptions(timeSeriesOpts).
+		SetExpireAfterSeconds(ttlSeconds)
 
-		timeSeriesOpts := options.TimeSeries().
-			SetTimeField("timestamp").
-			SetMetaField("source").
-			SetGranularity("seconds")
-		opts := options.CreateCollection().
-			SetTimeSeriesOptions(timeSeriesOpts).
-			SetExpireAfterSeconds(ttlSeconds)
-
-		if err := db.CreateCollection(ctx, string(name), opts); err != nil {
-			return fmt.Errorf("create collection %s: %w", name, err)
-		}
+	if err := db.CreateCollection(ctx, types.CollectionName, opts); err != nil {
+		return fmt.Errorf("create collection %s: %w", types.CollectionName, err)
 	}
 
 	return nil
 }
 
-// FindLogs returns recent log entries from a single collection, newest first.
+// FindLogs returns recent log entries, newest first.
 func (s *Store) FindLogs(ctx context.Context, filter logstore.FindLogsFilter) ([]types.LogEntry, error) {
-	coll := filter.Collection
-	if coll == "" {
-		coll = types.CollectionAPILogs
-	}
 	limit := filter.Limit
 	if limit <= 0 {
 		limit = 50
@@ -92,14 +78,17 @@ func (s *Store) FindLogs(ctx context.Context, filter logstore.FindLogsFilter) ([
 
 	query := bson.D{}
 	if filter.AppName != "" {
-		query = bson.D{{Key: "source.app_name", Value: filter.AppName}}
+		query = append(query, bson.E{Key: "source.app_name", Value: filter.AppName})
+	}
+	if filter.Type != "" {
+		query = append(query, bson.E{Key: "type", Value: string(filter.Type)})
 	}
 
 	opts := options.Find().
 		SetSort(bson.D{{Key: "timestamp", Value: -1}}).
 		SetLimit(limit)
 
-	cursor, err := s.db.Collection(string(coll)).Find(ctx, query, opts)
+	cursor, err := s.db.Collection(types.CollectionName).Find(ctx, query, opts)
 	if err != nil {
 		return nil, fmt.Errorf("find logs: %w", err)
 	}
@@ -115,18 +104,15 @@ func (s *Store) FindLogs(ctx context.Context, filter logstore.FindLogsFilter) ([
 	return entries, nil
 }
 
-// InsertLogs groups logs by their destination collection and inserts each
-// group with a single InsertMany call.
+// InsertLogs inserts all buffered logs into the service_logs collection.
 func (s *Store) InsertLogs(ctx context.Context, logs []types.BufferedLog) error {
-	grouped := make(map[types.CollectionName][]types.LogEntry)
-	for _, log := range logs {
-		grouped[log.Collection] = append(grouped[log.Collection], log.Entry)
+	entries := make([]interface{}, len(logs))
+	for i, log := range logs {
+		entries[i] = log.Entry
 	}
 
-	for collectionName, entries := range grouped {
-		if _, err := s.db.Collection(string(collectionName)).InsertMany(ctx, entries); err != nil {
-			return fmt.Errorf("insert into %s: %w", collectionName, err)
-		}
+	if _, err := s.db.Collection(types.CollectionName).InsertMany(ctx, entries); err != nil {
+		return fmt.Errorf("insert into %s: %w", types.CollectionName, err)
 	}
 
 	return nil
