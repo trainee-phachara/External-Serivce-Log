@@ -1,6 +1,6 @@
 go 1.26.4
 
 use (
-	./client
-	./external-service-log
+	./libs/client
+	./services/external-service-log
 )
