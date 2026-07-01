@@ -1,0 +1,107 @@
+services:
+
+  # ── Databases ────────────────────────────────────────────────────────────────
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Backend Services ─────────────────────────────────────────────────────────
+
+  external-service-log:
+    build: ./external-service-log
+    ports:
+      - "3000:3000"
+      - "50051:50051"
+    environment:
+      PORT: 3000
+      GRPC_PORT: 50051
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB_NAME: service_logs
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  user-service:
+    build: ./user-service
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/user_service
+      LOG_SERVICE_GRPC_URL: external-service-log:50051
+    depends_on:
+      postgres:
+        condition: service_healthy
+      external-service-log:
+        condition: service_started
+
+  order-service:
+    build: ./order-service
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/order_service
+      LOG_SERVICE_GRPC_URL: external-service-log:50051
+    depends_on:
+      postgres:
+        condition: service_healthy
+      external-service-log:
+        condition: service_started
+
+  payment-service:
+    build: ./payment-service
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/payment_service
+      LOG_SERVICE_GRPC_URL: external-service-log:50051
+    depends_on:
+      postgres:
+        condition: service_healthy
+      external-service-log:
+        condition: service_started
+
+  # ── Frontend ─────────────────────────────────────────────────────────────────
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - external-service-log
+      - user-service
+      - order-service
+      - payment-service
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+
+volumes:
+  mongo_data:
+  postgres_data:
