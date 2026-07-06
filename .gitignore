@@ -1,3 +1,5 @@
-*.MD
 learning*.md
+learning*.MD
+phase*.MD
+RunDev.MD
 DockerCompose.MD

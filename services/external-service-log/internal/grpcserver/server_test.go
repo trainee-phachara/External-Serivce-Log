@@ -69,9 +69,6 @@ func TestIngest_AcceptsValidRequestAndPushesToBuffer(t *testing.T) {
 		t.Fatalf("buffer size = %d, want 1", got)
 	}
 	entry := buf.Drain()[0]
-	if entry.Collection != types.CollectionAPILogs {
-		t.Errorf("collection = %q, want %q", entry.Collection, types.CollectionAPILogs)
-	}
 	if entry.Entry.TraceID != "trace-abc" {
 		t.Errorf("trace_id = %q, want %q", entry.Entry.TraceID, "trace-abc")
 	}
@@ -80,7 +77,7 @@ func TestIngest_AcceptsValidRequestAndPushesToBuffer(t *testing.T) {
 	}
 }
 
-func TestIngest_RoutesErrorStatusToErrorLogs(t *testing.T) {
+func TestIngest_AcceptsErrorStatusRequest(t *testing.T) {
 	s, buf := newTestServer()
 
 	resp, err := s.Ingest(context.Background(), validRequest(t, func(r *pb.IngestRequest) {
@@ -96,8 +93,11 @@ func TestIngest_RoutesErrorStatusToErrorLogs(t *testing.T) {
 	}
 
 	entry := buf.Drain()[0]
-	if entry.Collection != types.CollectionErrorLogs {
-		t.Errorf("collection = %q, want %q", entry.Collection, types.CollectionErrorLogs)
+	if entry.Entry.HTTPStatus != "500" {
+		t.Errorf("http_status = %q, want %q", entry.Entry.HTTPStatus, "500")
+	}
+	if entry.Entry.Type != types.LogTypeResponse {
+		t.Errorf("type = %q, want %q", entry.Entry.Type, types.LogTypeResponse)
 	}
 }
 

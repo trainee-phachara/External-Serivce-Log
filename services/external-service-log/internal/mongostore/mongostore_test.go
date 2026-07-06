@@ -124,6 +124,64 @@ func TestInsertLogs_InsertsAllToSingleCollection(t *testing.T) {
 	}
 }
 
+func TestConnect_ReturnsErrorForUnreachableHost(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	_, err := Connect(ctx, "mongodb://localhost:1", "test")
+	if err == nil {
+		t.Fatal("expected error for unreachable host, got nil")
+	}
+}
+
+func TestConnect_ReturnsErrorForInvalidURI(t *testing.T) {
+	_, err := Connect(context.Background(), "not-a-valid-uri://%%%", "test")
+	if err == nil {
+		t.Fatal("expected error for invalid URI, got nil")
+	}
+}
+
+func TestFindLogs_ReturnsEmptySliceWhenNoResults(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	entries, err := store.FindLogs(ctx, logstore.FindLogsFilter{Type: types.LogTypeRequest})
+	if err != nil {
+		t.Fatalf("FindLogs: %v", err)
+	}
+	if entries == nil {
+		t.Error("expected non-nil empty slice, got nil")
+	}
+	if len(entries) != 0 {
+		t.Errorf("len = %d, want 0", len(entries))
+	}
+}
+
+func TestFindLogs_FiltersByAppName(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+
+	source := func(app string) types.LogSource { return types.LogSource{AppName: app, ServiceName: app} }
+	logs := []types.BufferedLog{
+		{Entry: types.LogEntry{Timestamp: time.Now(), Source: source("order-service"), TraceID: "t-1", Metadata: map[string]interface{}{}, Endpoint: "/orders", HTTPStatus: "200", RawPayload: map[string]interface{}{}, Payload: map[string]interface{}{}, Type: types.LogTypeRequest, Direction: types.LogDirectionInbound}},
+		{Entry: types.LogEntry{Timestamp: time.Now(), Source: source("payment-service"), TraceID: "t-2", Metadata: map[string]interface{}{}, Endpoint: "/payments", HTTPStatus: "200", RawPayload: map[string]interface{}{}, Payload: map[string]interface{}{}, Type: types.LogTypeRequest, Direction: types.LogDirectionInbound}},
+	}
+	if err := store.InsertLogs(ctx, logs); err != nil {
+		t.Fatalf("InsertLogs: %v", err)
+	}
+
+	entries, err := store.FindLogs(ctx, logstore.FindLogsFilter{AppName: "order-service"})
+	if err != nil {
+		t.Fatalf("FindLogs: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("len = %d, want 1", len(entries))
+	}
+	if entries[0].TraceID != "t-1" {
+		t.Errorf("trace_id = %q, want %q", entries[0].TraceID, "t-1")
+	}
+}
+
 func TestFindLogs_FiltersByType(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
