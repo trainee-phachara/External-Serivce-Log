@@ -18,8 +18,20 @@ jobs:
           go-version-file: go.work
           cache-dependency-path: client/go.sum
 
-      - name: Run tests
-        run: go test -v -cover ./...
+      - name: Build
+        run: go build ./...
+        working-directory: client
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: client
+
+      - name: Test with coverage gate (>= 85%)
+        run: |
+          go test -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v '/pb')
+          go tool cover -func=coverage.out
+          awk '/^total:/{gsub(/%/,"",$3); if ($3+0 < 85) {print "❌ Coverage "$3"% is below 85%"; exit 1} else {print "✅ Coverage "$3"% passes gate"}}' coverage.out
         working-directory: client
 
   test-service:
@@ -33,6 +45,18 @@ jobs:
           go-version-file: go.work
           cache-dependency-path: services/external-service-log/go.sum
 
-      - name: Run tests
-        run: go test -v -cover ./...
+      - name: Build
+        run: go build ./...
+        working-directory: services/external-service-log
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: services/external-service-log
+
+      - name: Test with coverage gate (>= 85%)
+        run: |
+          go test -coverprofile=coverage.out -covermode=atomic ./internal/...
+          go tool cover -func=coverage.out
+          awk '/^total:/{gsub(/%/,"",$3); if ($3+0 < 85) {print "❌ Coverage "$3"% is below 85%"; exit 1} else {print "✅ Coverage "$3"% passes gate"}}' coverage.out
         working-directory: services/external-service-log
