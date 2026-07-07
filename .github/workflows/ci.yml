@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-client:
+    name: Test client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: client/go.sum
+
+      - name: Run tests
+        run: go test -v -cover ./...
+        working-directory: client
+
+  test-service:
+    name: Test external-service-log
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: services/external-service-log/go.sum
+
+      - name: Run tests
+        run: go test -v -cover ./...
+        working-directory: services/external-service-log
