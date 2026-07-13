@@ -30,8 +30,7 @@ jobs:
       - name: Test with coverage gate (>= 85%)
         run: |
           go test -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v '/pb')
-          go tool cover -func=coverage.out
-          awk '/^total:/{gsub(/%/,"",$3); if ($3+0 < 85) {print "❌ Coverage "$3"% is below 85%"; exit 1} else {print "✅ Coverage "$3"% passes gate"}}' coverage.out
+          go tool cover -func=coverage.out | awk '/^total:/{gsub(/%/,"",$3); if ($3+0 < 85) {print "❌ Coverage "$3"% is below 85%"; exit 1} else {print "✅ Coverage "$3"% passes gate"}}'
         working-directory: client
 
   test-service:
@@ -57,6 +56,5 @@ jobs:
       - name: Test with coverage gate (>= 85%)
         run: |
           go test -coverprofile=coverage.out -covermode=atomic ./internal/...
-          go tool cover -func=coverage.out
-          awk '/^total:/{gsub(/%/,"",$3); if ($3+0 < 85) {print "❌ Coverage "$3"% is below 85%"; exit 1} else {print "✅ Coverage "$3"% passes gate"}}' coverage.out
+          go tool cover -func=coverage.out | awk '/^total:/{gsub(/%/,"",$3); if ($3+0 < 85) {print "❌ Coverage "$3"% is below 85%"; exit 1} else {print "✅ Coverage "$3"% passes gate"}}'
         working-directory: services/external-service-log
