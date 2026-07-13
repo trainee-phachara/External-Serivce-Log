@@ -23,9 +23,12 @@ jobs:
         working-directory: client
 
       - name: Lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          working-directory: client
+        run: |
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+          golangci-lint run ./...
+        working-directory: client
+        env:
+          GOWORK: "off"
 
       - name: Test with coverage gate (>= 85%)
         run: |
@@ -49,9 +52,12 @@ jobs:
         working-directory: services/external-service-log
 
       - name: Lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          working-directory: services/external-service-log
+        run: |
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+          golangci-lint run ./...
+        working-directory: services/external-service-log
+        env:
+          GOWORK: "off"
 
       - name: Test with coverage gate (>= 85%)
         run: |
