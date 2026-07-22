@@ -200,7 +200,10 @@ func TestRun_SkipsDoneDays(t *testing.T) {
 
 	// Archive collection should not have been created.
 	archiveName := archiveCollectionName(oldTime)
-	count, _ := db.Collection(archiveName).CountDocuments(ctx, bson.D{})
+	count, err := db.Collection(archiveName).CountDocuments(ctx, bson.D{})
+	if err != nil {
+		t.Fatalf("count archive: %v", err)
+	}
 	if count != 0 {
 		t.Errorf("done day should be skipped, but archive has %d documents", count)
 	}

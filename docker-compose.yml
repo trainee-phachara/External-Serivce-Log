@@ -18,36 +18,39 @@ services:
 
   configsvr:
     image: mongo:7
-    command: ["mongod", "--configsvr", "--replSet", "rs-config", "--bind_ip_all"]
+    command: ["mongod", "--configsvr", "--replSet", "rs-config", "--port", "27017", "--bind_ip_all"]
     volumes:
       - configsvr_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 5s
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/27017'"]
+      interval: 3s
       timeout: 5s
-      retries: 10
+      retries: 20
+      start_period: 5s
 
   shard1:
     image: mongo:7
-    command: ["mongod", "--shardsvr", "--replSet", "rs-shard1", "--bind_ip_all"]
+    command: ["mongod", "--shardsvr", "--replSet", "rs-shard1", "--port", "27017", "--bind_ip_all"]
     volumes:
       - shard1_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 5s
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/27017'"]
+      interval: 3s
       timeout: 5s
-      retries: 10
+      retries: 20
+      start_period: 5s
 
   shard2:
     image: mongo:7
-    command: ["mongod", "--shardsvr", "--replSet", "rs-shard2", "--bind_ip_all"]
+    command: ["mongod", "--shardsvr", "--replSet", "rs-shard2", "--port", "27017", "--bind_ip_all"]
     volumes:
       - shard2_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 5s
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/27017'"]
+      interval: 3s
       timeout: 5s
-      retries: 10
+      retries: 20
+      start_period: 5s
 
   mongo-init-rs:
     image: mongo:7
@@ -67,15 +70,16 @@ services:
     image: mongo:7
     command: ["mongos", "--configdb", "rs-config/configsvr:27017", "--bind_ip_all"]
     ports:
-      - "27017:27017"
+      - "27020:27017"
     depends_on:
       mongo-init-rs:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep -q '^1$'"]
       interval: 5s
-      timeout: 5s
-      retries: 10
+      timeout: 10s
+      retries: 20
+      start_period: 10s
 
   mongo-init-sharding:
     image: mongo:7
@@ -91,6 +95,7 @@ services:
 
   external-service-log:
     build: ./services/external-service-log
+    restart: unless-stopped
     ports:
       - "3000:3000"
       - "50051:50051"

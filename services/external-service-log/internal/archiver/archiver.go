@@ -137,7 +137,7 @@ func (a *Archiver) pendingDays(ctx context.Context) ([]time.Time, error) {
 // the appropriate monthly archive collection, verifies the count, and marks
 // the day done in archive_state.
 func (a *Archiver) archiveDay(ctx context.Context, day time.Time) error {
-	start := time.Now()
+	start := a.now()
 	dayStart := day.UTC()
 	dayEnd := dayStart.AddDate(0, 0, 1)
 	dayKey := dayStart.Format("2006-01-02")
@@ -163,7 +163,7 @@ func (a *Archiver) archiveDay(ctx context.Context, day time.Time) error {
 		return fmt.Errorf("count hot: %w", err)
 	}
 	if hotCount == 0 {
-		return a.markDone(ctx, dayKey, 0, time.Since(start))
+		return a.markDone(ctx, dayKey, 0, a.now().Sub(start))
 	}
 
 	// Stream hot documents and insert into archive in batches.
@@ -209,7 +209,7 @@ func (a *Archiver) archiveDay(ctx context.Context, day time.Time) error {
 	}
 
 	log.Printf("archiver: day %s — archived %d documents", dayKey, copied)
-	return a.markDone(ctx, dayKey, copied, time.Since(start))
+	return a.markDone(ctx, dayKey, copied, a.now().Sub(start))
 }
 
 // archiveCollectionName returns the monthly archive collection name for time t.
@@ -257,7 +257,7 @@ func (a *Archiver) markDone(ctx context.Context, dayKey string, count int64, dur
 		ID:         dayKey,
 		Status:     "done",
 		Count:      count,
-		ArchivedAt: time.Now().UTC(),
+		ArchivedAt: a.now().UTC(),
 		DurationMs: duration.Milliseconds(),
 	}
 	_, err := a.db.Collection(stateCollection).ReplaceOne(
