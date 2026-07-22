@@ -4,3 +4,5 @@ phase*.MD
 RunDev.MD
 DockerCompose.MD
 Archiver.MD
+Sharding.MD
+demo/
