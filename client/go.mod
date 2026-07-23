@@ -1,4 +1,4 @@
-module github.com/trainee-phachara/External-Serivce-Log/client
+module github.com/trainee-phachara/External-Service-Log/client
 
 go 1.25.0
 
